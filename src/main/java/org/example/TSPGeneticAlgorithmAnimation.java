@@ -3,6 +3,8 @@ package org.example;
 import org.knowm.xchart.SwingWrapper;
 import org.knowm.xchart.XYChart;
 import org.knowm.xchart.XYSeries;
+import org.knowm.xchart.style.Styler;
+import org.knowm.xchart.style.XYStyler;
 import org.knowm.xchart.style.lines.SeriesLines;
 import org.knowm.xchart.style.markers.SeriesMarkers;
 
@@ -18,6 +20,8 @@ public class TSPGeneticAlgorithmAnimation {
     private static final int NUMBER_OF_CITIES = 30;
     private static final int WIDTH = 800;
     private static final int HEIGHT = 600;
+    private static final int WIDTH2 = 1550;
+    private static final int HEIGHT2 = 600;
     private static final int POPULATION_SIZE = 80;
     public static final int ELITE_SIZE = 8;
     private static final int MAX_GENERATIONS = 100000;
@@ -42,19 +46,23 @@ public class TSPGeneticAlgorithmAnimation {
         sw.displayChart();
 
         int generationCount = 0;
+        int genWithBestDistance = 0;
         int generationsWithNoImprovement = 0;
         double bestDistance = Integer.MAX_VALUE;
         int[] bestRoute = population.get(0);
+        List<Double> bestDistanceList = new ArrayList<>();
 
         while (generationCount < MAX_GENERATIONS && generationsWithNoImprovement < MAX_GENERATIONS_WITH_NO_IMPROVEMENT) {
             evolvePopulation();
             double currentBestDistance = getBestDistanceInPop(); // Get distance of the best route
+            bestDistanceList.add(currentBestDistance);
             int[] currentBestRoute = getBestRouteInPop();
             System.out.println(currentBestDistance);
 
             if (currentBestDistance < bestDistance) {
                 bestDistance = currentBestDistance;
                 bestRoute = currentBestRoute;
+                genWithBestDistance = generationCount;
                 generationsWithNoImprovement = 0; // Reset count of generations with no improvement
             } else generationsWithNoImprovement++; // Increment count of generations with no improvement
 
@@ -63,6 +71,19 @@ public class TSPGeneticAlgorithmAnimation {
 
             generationCount++; // Increment generation count
         }
+
+        List<Integer> XAxisData = generateXAxisData(bestDistanceList.size());
+        XYChart chart2 = new XYChart(WIDTH2, HEIGHT2);
+        XYSeries bestDistInGenSeries = chart2.addSeries("Best Distance in Generation", XAxisData, bestDistanceList);
+        XYSeries bestDistEverSeries = chart2.addSeries("Best Distance Ever",
+                Collections.singletonList(genWithBestDistance),
+                Collections.singletonList(bestDistance));
+        bestDistInGenSeries.setMarker(SeriesMarkers.NONE);
+        bestDistEverSeries.setMarkerColor(Color.red);
+        XYStyler styler = chart2.getStyler();
+        styler.setLegendPosition(Styler.LegendPosition.InsideNE);
+        SwingWrapper<XYChart> sw2 = new SwingWrapper<>(chart2);
+        sw2.displayChart();
     }
 
 
@@ -81,6 +102,15 @@ public class TSPGeneticAlgorithmAnimation {
 
     private static double[] getYData() {
         return cities.stream().mapToDouble(Point::getY).toArray();
+    }
+
+
+    private static List<Integer> generateXAxisData(int size) {
+        List<Integer> xAxisData = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            xAxisData.add(i);
+        }
+        return xAxisData;
     }
 
 
@@ -192,7 +222,7 @@ public class TSPGeneticAlgorithmAnimation {
         return false;
     }
 
-    
+
     public static int[] mutate(int[] individual, double mutationRate) {
         Random random = new Random();
         int[] tempindiv = new int[individual.length-2];
