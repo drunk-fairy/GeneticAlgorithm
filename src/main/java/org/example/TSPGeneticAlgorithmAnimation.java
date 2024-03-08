@@ -1,9 +1,9 @@
 package org.example;
 
-import org.knowm.xchart.QuickChart;
 import org.knowm.xchart.SwingWrapper;
 import org.knowm.xchart.XYChart;
 import org.knowm.xchart.XYSeries;
+import org.knowm.xchart.style.lines.SeriesLines;
 import org.knowm.xchart.style.markers.SeriesMarkers;
 
 import java.awt.*;
@@ -18,23 +18,26 @@ public class TSPGeneticAlgorithmAnimation {
     private static final int NUMBER_OF_CITIES = 30;
     private static final int WIDTH = 800;
     private static final int HEIGHT = 600;
-    private static final int POPULATION_SIZE = 100;
-    private static final int MAX_GENERATIONS = 20000;
-    private static final int MAX_GENERATIONS_WITH_NO_IMPROVEMENT = 2000;
+    private static final int POPULATION_SIZE = 80;
+    public static final int ELITE_SIZE = 8;
+    private static final int MAX_GENERATIONS = 100000;
+    private static final int MAX_GENERATIONS_WITH_NO_IMPROVEMENT = 20000;
+    private static final double mutationRatePopulation = 0.02;
     private static final Random random = new Random();
     private static final List<Point> cities = new ArrayList<>();
     private static List<int[]> population;
     private static final double[] cumulativeProportions = new double[POPULATION_SIZE];
-    private static int count = 0;
-    private static int count2 = 0;
+    private static final int startEndCityIndex = random.nextInt(NUMBER_OF_CITIES);
 
 
     public static void main(String[] args) {
         generateCities(NUMBER_OF_CITIES);
         generateInitialPopulation();
 
-        XYChart chart = QuickChart.getChart("TSP Genetic Algorithm", "X", "Y", "Cities", getXData(), getYData());
-        //chart.getStyler().setSeriesRenderStyle("Cities", XYSeries.XYSeriesRenderStyle.Scatter);
+        XYChart chart = new XYChart(WIDTH, HEIGHT);
+        XYSeries citiesSeries = chart.addSeries("Cities", getXData(), getYData());
+        citiesSeries.setMarker(SeriesMarkers.CIRCLE);
+        citiesSeries.setLineStyle(SeriesLines.NONE);
         SwingWrapper<XYChart> sw = new SwingWrapper<>(chart);
         sw.displayChart();
 
@@ -45,31 +48,25 @@ public class TSPGeneticAlgorithmAnimation {
 
         while (generationCount < MAX_GENERATIONS && generationsWithNoImprovement < MAX_GENERATIONS_WITH_NO_IMPROVEMENT) {
             evolvePopulation();
-            double currentBestDistance = getBestDistanceInPop();
-            int[] currentBestRoute = getBestRouteInPop(); // Calculate distance of the best route
-            // TODO it seems to pick the first element in generation rather than the best one. Change that.
-            // upd: nevermind. there was a length-based sorting implemented in evolvePopulation()
+            double currentBestDistance = getBestDistanceInPop(); // Get distance of the best route
+            int[] currentBestRoute = getBestRouteInPop();
             System.out.println(currentBestDistance);
+
             if (currentBestDistance < bestDistance) {
                 bestDistance = currentBestDistance;
                 bestRoute = currentBestRoute;
                 generationsWithNoImprovement = 0; // Reset count of generations with no improvement
-            } else {
-                generationsWithNoImprovement++; // Increment count of generations with no improvement
-            }
+            } else generationsWithNoImprovement++; // Increment count of generations with no improvement
+
             updatePlot(chart, bestRoute); // Update plot with the best route in this generation
             sw.repaintChart();
-            try {
-                Thread.sleep(10); // Add a short delay to see the animation
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+
             generationCount++; // Increment generation count
         }
     }
 
+
     private static void generateCities(int numCities) {
-        //System.out.println("generateCities");
         for (int i = 0; i < numCities; i++) {
             int x = random.nextInt(WIDTH);
             int y = random.nextInt(HEIGHT);
@@ -77,77 +74,194 @@ public class TSPGeneticAlgorithmAnimation {
         }
     }
 
+
+    private static double[] getXData() {
+        return cities.stream().mapToDouble(Point::getX).toArray();
+    }
+
+    private static double[] getYData() {
+        return cities.stream().mapToDouble(Point::getY).toArray();
+    }
+
+
     private static void generateInitialPopulation() {
-        //System.out.println("generatePopulation");
-        population = new ArrayList<>(); // initialising previously declared _population_
+        population = new ArrayList<>();
         for (int i = 0; i < POPULATION_SIZE; i++) {
             List<Integer> cityIndices = new ArrayList<>();
-            for (int j = 0; j < cities.size(); j++) { // _cites_ is declared and initialised before _main_
-                // and filled with randomly generated Points that represent cities in _generateCities_ function
-                // here we create as many city indices as there are cities
-                cityIndices.add(j);
-            }
-            Collections.shuffle(cityIndices); // shuffle _cityIndices_ randomly to create a root
+            for (int j = 0; j < cities.size(); j++) cityIndices.add(j);
+
+            Collections.shuffle(cityIndices); // Shuffle the city indices randomly
+            cityIndices.remove((Integer) startEndCityIndex); // Remove start/end city from middle of route
+            cityIndices.add(0, startEndCityIndex); // Add start/end city at beginning of route
+            cityIndices.add(startEndCityIndex); // Add start/end city at end of route
             int[] route = cityIndices.stream().mapToInt(Integer::intValue).toArray();
-            // TODO figure out how exactly the previous line works
-            population.add(route); // add the newly created route to the initial population
+            population.add(route);
         }
     }
 
+
     private static void evolvePopulation() {
-        //System.out.println("-----EVOLVE POPULATION--EVOLVE POPULATION---EVOLVE POPULATION--EVOLVE POPULATION");
         updateCumulativeProportions();
         List<int[]> newPopulation = new ArrayList<>();
-        for (int i = 0; i < POPULATION_SIZE; i++) {
-            int[] parent1 = selectParent(); // TODO parents are now selected randomly and i think it needs to be changed
+        for (int i = ELITE_SIZE; i < POPULATION_SIZE; i++) {
+            int[] parent1 = selectParent();
             int[] parent2 = selectParent();
             while (parent1==parent2) parent2 = selectParent();
             int[] child = crossover(parent1, parent2);
-            //mutate(child);
             newPopulation.add(child);
         }
-        double mutationRatePopulation = 0.005;
-        //population = newPopulation;
-        population = mutatePopulation(newPopulation, mutationRatePopulation);;
-        //Collections.sort(population, Comparator.comparingDouble(TSPGeneticAlgorithmAnimation::getDistance));
-        //Collections.sort(population, (route1, route2) -> calculateRouteDistance(route1) - calculateRouteDistance(route2));
+        population.sort(Comparator.comparingDouble(TSPGeneticAlgorithmAnimation::getDistance));
+        for (int i = 0; i<ELITE_SIZE; i++) {
+            newPopulation.add(population.get(i));
+        }
+        population = mutatePopulation(newPopulation, mutationRatePopulation);
     }
+
 
     private static int[] selectParent() {
-        //System.out.println("selectParent");
-        //return population.get(random.nextInt(population.size()));
-        if (random.nextDouble()>0.5) {
-            return tournamentSelection();
-        }
-        else {
+        if (random.nextDouble()>0.5) return tournamentSelection();
+        else
             return biasedRandomSelection();
-        }
-        //return biasedRandomSelection();
     }
 
+
     private static int[] tournamentSelection() {
-        //System.out.println("tournament");
         int[] candidate1 = population.get(random.nextInt(population.size()));
         int[] candidate2 = population.get(random.nextInt(population.size()));
-
         while(candidate1==candidate2) {
             candidate2 = population.get(random.nextInt(population.size()));
         }
-
         if (getDistance(candidate1) < getDistance(candidate2)) {
-            return candidate1; // choosing the candidate with smaller distance
+            return candidate1;
         }
         else return candidate2;
     }
 
+
     private static int[] biasedRandomSelection() {
-        //System.out.println("biased");
         double selectedValue = random.nextDouble();
         for (int i=0; i<cumulativeProportions.length; i++) {
             double value = cumulativeProportions[i];
             if(value > selectedValue) return population.get(i);
         }
         return null;
+    }
+
+
+    private static int[] crossover(int[] parent1, int[] parent2) {
+        int[] tempparent1 = new int[parent1.length-2];
+        int[] tempparent2 = new int[parent2.length-2];
+        System.arraycopy(parent1, 1, tempparent1, 0, parent1.length-2);
+        System.arraycopy(parent2, 1, tempparent2, 0, parent2.length-2);
+
+        int startPos = random.nextInt(tempparent1.length);
+        int endPos = random.nextInt(tempparent1.length);
+        if (startPos > endPos) {
+            int tempPos = startPos;
+            startPos = endPos;
+            endPos = tempPos;
+        }
+        int[] child = new int[parent1.length];
+        int fillnum = NUMBER_OF_CITIES+10;
+        Arrays.fill(child, fillnum);
+        child[0] = parent1[0];
+        child[child.length-1] = parent1[parent1.length-1];
+
+        // Copy the segment between startPos and endPos from tempparent1 to the child
+        System.arraycopy(tempparent1, startPos, child, startPos+1, endPos - startPos);
+
+        for (int i = 0; i < tempparent2.length; i++) {
+            if (!contains(child, tempparent2[i])) {
+                for (int j = 1; j < child.length-1; j++) {
+                    if (child[j]==fillnum) {
+                        child[j] = tempparent2[i];
+                        break;
+                    }
+                }
+            }
+        }
+
+        return child;
+    }
+
+
+    private static boolean contains(int[] array, int value) {
+        for (int i : array) {
+            if (i == value) return true;
+        }
+        return false;
+    }
+
+    
+    public static int[] mutate(int[] individual, double mutationRate) {
+        Random random = new Random();
+        int[] tempindiv = new int[individual.length-2];
+        System.arraycopy(individual, 1, tempindiv, 0, individual.length-2);
+
+        for (int swapped = 0; swapped < tempindiv.length; swapped++) {
+            if (random.nextDouble() < mutationRate) {
+                int swapWith = (int) (random.nextDouble() * tempindiv.length);
+                int city1 = tempindiv[swapped];
+                int city2 = tempindiv[swapWith];
+                tempindiv[swapped] = city2;
+                tempindiv[swapWith] = city1;
+            }
+        }
+        int[] mutatedindiv = new int[individual.length];
+        mutatedindiv[0] = individual[0];
+        mutatedindiv[mutatedindiv.length-1] = individual[individual.length-1];
+        System.arraycopy(tempindiv, 0, mutatedindiv, 1, tempindiv.length);
+        return mutatedindiv;
+    }
+
+
+    public static List<int[]> mutatePopulation(List<int[]> population, double mutationRate) {
+        List<int[]> mutatedPopulation = new ArrayList<>();
+        for (int[] individual : population) {
+            int[] mutatedIndividual = mutate(individual, mutationRate);
+            mutatedPopulation.add(mutatedIndividual);
+        }
+        return mutatedPopulation;
+    }
+
+
+    public static void updateCumulativeProportions() {
+        double sum = 0;
+        double proportionSum = 0.0;
+        double[] proportions = new double[population.size()];
+        double[] normalisedProportions = new double[proportions.length];
+        double cumulativeTotal = 0.0;
+
+        for (int i=0; i<population.size(); i++) {
+            sum += getDistance(population.get(i));
+        }
+        for (int i=0; i<population.size(); i++) {
+            proportions[i] = (sum/getDistance(population.get(i)));
+        }
+        for(int i=0; i< proportions.length; i++) {
+            proportionSum += proportions[i];
+        }
+        for(int i=0; i< proportions.length; i++) {
+            normalisedProportions[i] = proportions[i]/proportionSum;
+        }
+        for(int i=0; i<proportions.length; i++) {
+            cumulativeTotal += normalisedProportions[i];
+            cumulativeProportions[i] = cumulativeTotal;
+        }
+    }
+
+
+    public static double getDistance(int[] route) {
+        double totalDistance = 0.0;
+        for (int i=0; i < route.length-1; i++) {
+            Point fromTown = cities.get(route[i]);
+            Point toTown = cities.get(route[i+1]);
+            int x = toTown.x - fromTown.x;
+            int y = toTown.y - fromTown.y;
+            double distance = Math.sqrt(x*x + y*y);
+            totalDistance += distance;
+        }
+        return totalDistance;
     }
 
 
@@ -164,6 +278,7 @@ public class TSPGeneticAlgorithmAnimation {
         return bestRouteInPop;
     }
 
+
     public static double getBestDistanceInPop() {
         double bestDistanceInPop = getDistance(population.get(0));
         for (int[] route : population) {
@@ -176,157 +291,7 @@ public class TSPGeneticAlgorithmAnimation {
     }
 
 
-    public static void updateCumulativeProportions() {
-        //System.out.println("--------------UPDATE CUM FUN------------------------");
-        double sum = 0;
-        double proportionSum = 0.0;
-        double[] proportions = new double[population.size()];
-        double[] normalisedProportions = new double[proportions.length];
-        //double[] cumulativeProportions = new double[proportions.length];
-        double cumulativeTotal = 0.0;
-
-        for (int i=0; i<population.size(); i++) {
-            sum += getDistance(population.get(i));
-        }
-
-        for (int i=0; i<population.size(); i++) {
-            proportions[i] = (sum/getDistance(population.get(i)));
-        }
-
-        for(int i=0; i< proportions.length; i++) {
-            proportionSum += proportions[i];
-        }
-        // double proportionSum = Arrays.stream(proportions).sum();
-
-        for(int i=0; i< proportions.length; i++) {
-            normalisedProportions[i] = proportions[i]/proportionSum;
-        }
-
-        for(int i=0; i<proportions.length; i++) {
-            cumulativeTotal += normalisedProportions[i];
-            cumulativeProportions[i] = cumulativeTotal;
-        }
-    }
-
-
-    private static int[] crossover(int[] parent1, int[] parent2) {
-        //System.out.println("crossover");
-        int startPos = random.nextInt(parent1.length);
-        int endPos = random.nextInt(parent1.length);
-        int[] child = new int[parent1.length];
-        for (int i = 0; i < parent1.length; i++) {
-            if (startPos < endPos && i > startPos && i < endPos) {
-                child[i] = parent1[i];
-            } else if (startPos > endPos && !(i < startPos && i > endPos)) {
-                child[i] = parent1[i];
-            }
-        }
-        for (int i = 0; i < parent2.length; i++) {
-            if (!contains(child, parent2[i])) {
-                for (int j = 0; j < child.length; j++) {
-                    if (child[j] == 0) {
-                        child[j] = parent2[i];
-                        break;
-                    }
-                }
-            }
-        }
-        return child;
-    }
-
-//    private static void mutate(int[] route) {
-//        count++;
-//        //System.out.println("mutate; count =");
-//        //System.out.println(count);
-//        //System.out.println();
-//        int pos1 = random.nextInt(route.length);
-//        int pos2 = random.nextInt(route.length);
-//        int temp = route[pos1];
-//        route[pos1] = route[pos2];
-//        route[pos2] = temp;
-//    }
-
-    public static int[] mutate(int[] individual, double mutationRate) {
-        Random random = new Random();
-        for (int swapped = 0; swapped < individual.length; swapped++) {
-            if (random.nextDouble() < mutationRate) {
-                int swapWith = (int) (random.nextDouble() * individual.length);
-
-                int city1 = individual[swapped];
-                int city2 = individual[swapWith];
-
-                individual[swapped] = city2;
-                individual[swapWith] = city1;
-            }
-        }
-        return individual;
-    }
-
-
-    public static List<int[]> mutatePopulation(List<int[]> population, double mutationRate) {
-        List<int[]> mutatedPopulation = new ArrayList<>();
-
-        for (int[] individual : population) {
-            int[] mutatedIndividual = mutate(individual, mutationRate);
-            mutatedPopulation.add(mutatedIndividual);
-        }
-        return mutatedPopulation;
-    }
-
-
-    private static boolean contains(int[] array, int value) {
-        //System.out.println("contains");
-        for (int i : array) {
-            if (i == value) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static double[] getXData() {
-        System.out.println("getX");
-        return cities.stream().mapToDouble(Point::getX).toArray();
-    }
-
-    private static double[] getYData() {
-        System.out.println("getY");
-        return cities.stream().mapToDouble(Point::getY).toArray();
-    }
-
-//    private static int calculateRouteDistance(int[] route) {
-//        int distance = 0;
-//        for (int i = 0; i < route.length - 1; i++) {
-//            Point city1 = cities.get(route[i]);
-//            Point city2 = cities.get(route[i + 1]);
-//            distance += calculateDistance(city1, city2);
-//        }
-//        return distance;
-//    }
-
-    public static double getDistance(int[] route) {
-        // TODO create a function like getBestDistance
-        //System.out.println("get distance");
-        double totalDistance = 0.0;
-        for (int i=0; i < route.length-1; i++) {
-            Point fromTown = cities.get(route[i]);
-            Point toTown = cities.get(route[i+1]);
-            int x = toTown.x - fromTown.x;
-            int y = toTown.y - fromTown.y;
-            double distance = Math.sqrt(x*x + y*y);
-            totalDistance += distance;
-        }
-        return totalDistance;
-    }
-
-//    private static double calculateDistance(Point p1, Point p2) {
-//        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-//    }
-
     private static void updatePlot(XYChart chart, int[] route) {
-        count2++;
-        //System.out.println("-----------------UPDATE PLOT-----------------------count2 =");
-        //System.out.println(count2);
         // Calculate the total distance of the route
         double totalDistance = getDistance(route);
         // Update the title of the chart to display the current total distance
@@ -343,8 +308,9 @@ public class TSPGeneticAlgorithmAnimation {
                 xData[i] = city.getX();
                 yData[i] = city.getY();
             }
-            chart.addSeries("Route", xData, yData);
-        } else if (routeSeriesExists && route.length > 0) {
+            chart.addSeries("Route", xData, yData).setLineColor(Color.blue);
+        }
+        else if (routeSeriesExists && route.length > 0) {
             // If the "Route" series already exists, update it with the new data
             double[] xData = new double[route.length];
             double[] yData = new double[route.length];
@@ -353,34 +319,7 @@ public class TSPGeneticAlgorithmAnimation {
                 xData[i] = city.getX();
                 yData[i] = city.getY();
             }
-            chart.updateXYSeries("Route", xData, yData, null);
+            chart.updateXYSeries("Route", xData, yData, null).setMarker(SeriesMarkers.NONE);;
         }
     }
-
-//    private static void updatePlot(XYChart chart, int[] route) {
-//        // Check if the "Route" series already exists
-//        boolean routeSeriesExists = chart.getSeriesMap().containsKey("Route");
-//
-//        // If the "Route" series doesn't exist and the route data is not empty, create and add it to the chart
-//        if (!routeSeriesExists && route.length > 0) {
-//            double[] xData = new double[route.length];
-//            double[] yData = new double[route.length];
-//            for (int i = 0; i < route.length; i++) {
-//                Point city = cities.get(route[i]);
-//                xData[i] = city.getX();
-//                yData[i] = city.getY();
-//            }
-//            chart.addSeries("Route", xData, yData);
-//        } else if (routeSeriesExists && route.length > 0) {
-//            // If the "Route" series already exists, update it with the new data
-//            double[] xData = new double[route.length];
-//            double[] yData = new double[route.length];
-//            for (int i = 0; i < route.length; i++) {
-//                Point city = cities.get(route[i]);
-//                xData[i] = city.getX();
-//                yData[i] = city.getY();
-//            }
-//            chart.updateXYSeries("Route", xData, yData, null);
-//        }
-//    }
 }
