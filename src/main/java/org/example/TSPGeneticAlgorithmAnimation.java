@@ -1,18 +1,19 @@
 package org.example;
 
-import org.knowm.xchart.SwingWrapper;
-import org.knowm.xchart.XYChart;
-import org.knowm.xchart.XYSeries;
+import org.knowm.xchart.*;
 import org.knowm.xchart.style.Styler;
 import org.knowm.xchart.style.XYStyler;
 import org.knowm.xchart.style.lines.SeriesLines;
 import org.knowm.xchart.style.markers.SeriesMarkers;
 
 import java.awt.*;
+import java.io.IOException;
 import java.util.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Random;
+import java.io.File;
+import java.util.Arrays;
 
 
 public class TSPGeneticAlgorithmAnimation {
@@ -26,7 +27,7 @@ public class TSPGeneticAlgorithmAnimation {
     public static final int ELITE_SIZE = 8;
     private static final int MAX_GENERATIONS = 100000;
     private static final int MAX_GENERATIONS_WITH_NO_IMPROVEMENT = 20000;
-    private static final double mutationRatePopulation = 0.02;
+    private static final double mutationRate = 0.02;
     private static final Random random = new Random();
     private static final List<Point> cities = new ArrayList<>();
     private static List<int[]> population;
@@ -66,12 +67,10 @@ public class TSPGeneticAlgorithmAnimation {
                 generationsWithNoImprovement = 0; // Reset count of generations with no improvement
             } else generationsWithNoImprovement++; // Increment count of generations with no improvement
 
-            updatePlot(chart, bestRoute); // Update plot with the best route in this generation
+            updatePlot(chart, bestRoute, generationCount, genWithBestDistance); // Update plot with the best route in this generation
             sw.repaintChart();
-
             generationCount++; // Increment generation count
         }
-
         List<Integer> XAxisData = generateXAxisData(bestDistanceList.size());
         XYChart chart2 = new XYChart(WIDTH2, HEIGHT2);
         XYSeries bestDistInGenSeries = chart2.addSeries("Best Distance in Generation", XAxisData, bestDistanceList);
@@ -84,7 +83,10 @@ public class TSPGeneticAlgorithmAnimation {
         styler.setLegendPosition(Styler.LegendPosition.InsideNE);
         SwingWrapper<XYChart> sw2 = new SwingWrapper<>(chart2);
         sw2.displayChart();
+
+        saveCharts(chart, chart2);
     }
+
 
 
     private static void generateCities(int numCities) {
@@ -144,7 +146,7 @@ public class TSPGeneticAlgorithmAnimation {
         for (int i = 0; i<ELITE_SIZE; i++) {
             newPopulation.add(population.get(i));
         }
-        population = mutatePopulation(newPopulation, mutationRatePopulation);
+        population = mutatePopulation(newPopulation, mutationRate);
     }
 
 
@@ -321,12 +323,18 @@ public class TSPGeneticAlgorithmAnimation {
     }
 
 
-    private static void updatePlot(XYChart chart, int[] route) {
+    private static void updatePlot(XYChart chart, int[] route, int genCount, int genWithBestDistance) {
         // Calculate the total distance of the route
-        double totalDistance = getDistance(route);
-        // Update the title of the chart to display the current total distance
-        chart.setTitle("TSP Genetic Algorithm (Total Distance: " + totalDistance + ")");
-
+        double currentBestDistance = getDistance(route);
+        // Update the title of the chart to display the current best distance & other info
+        chart.setTitle("BD: " + currentBestDistance + // Best Distance
+                "   BDG: " + genWithBestDistance + // Best Distance Generation
+                "   CG: " + genCount + // Current generation
+                "   PS: " + POPULATION_SIZE +
+                "   ES: " + ELITE_SIZE +
+                "   MG: " + MAX_GENERATIONS +
+                "   MGNI: " + MAX_GENERATIONS_WITH_NO_IMPROVEMENT +
+                "   MR: " + mutationRate);
         // Check if the "Route" series already exists
         boolean routeSeriesExists = chart.getSeriesMap().containsKey("Route");
         // If the "Route" series doesn't exist and the route data is not empty, create and add it to the chart
@@ -351,5 +359,49 @@ public class TSPGeneticAlgorithmAnimation {
             }
             chart.updateXYSeries("Route", xData, yData, null).setMarker(SeriesMarkers.NONE);;
         }
+    }
+
+
+    private static void saveCharts(XYChart chart1, XYChart chart2) {
+        File folder = new File("charts");
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
+        String directoryPath = "charts";
+        String baseName1 = "chartroute";
+        String baseName2 = "chartprogress";
+        String[] filenames = getFilenames(directoryPath);
+        int nextNumber = getNextNumber(filenames, baseName1);
+        String nextFilename1 = baseName1 + nextNumber;
+        String nextFilename2 = baseName2 + nextNumber;
+        try {
+            BitmapEncoder.saveBitmap(chart1, "charts/" + nextFilename1, BitmapEncoder.BitmapFormat.PNG);
+            BitmapEncoder.saveBitmap(chart2, "charts/" + nextFilename2, BitmapEncoder.BitmapFormat.PNG);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private static String[] getFilenames(String directoryPath) {
+        File directory = new File(directoryPath);
+        return directory.list();
+    }
+
+    private static int getNextNumber(String[] filenames, String baseName) {
+        int maxNumber = 0;
+        for (String filename : filenames) {
+            if (filename.startsWith(baseName)) {
+                String numberString = filename.substring(baseName.length(), filename.length()-4);
+                try {
+                    int number = Integer.parseInt(numberString);
+                    maxNumber = Math.max(maxNumber, number);
+                } catch (NumberFormatException e) {
+                    System.err.println("Warning: Unable to parse number from filename: " + filename);
+                    // Ignore filenames that cannot be parsed as numbers
+                }
+            }
+        }
+        return maxNumber + 1;
     }
 }
