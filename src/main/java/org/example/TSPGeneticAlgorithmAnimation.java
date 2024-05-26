@@ -398,9 +398,10 @@ public class TSPGeneticAlgorithmAnimation {
                 "   BDG: " + genWithBestDistance + // Best known distance generation
                 "   CG: " + genCount + // Current generation
                 "   PS: " + POPULATION_SIZE + // population size
+                "   NC: " + NUMBER_OF_CITIES + // number of cities
                 "   ES: " + ELITE_SIZE + // elite size
                 "   MG: " + MAX_GENERATIONS + // maximum generations
-                "   MGNI: " + MAX_GENERATIONS_WITH_NO_IMPROVEMENT + // maximum generations with no improvement
+                "   NI: " + MAX_GENERATIONS_WITH_NO_IMPROVEMENT + // maximum generations with no improvement
                 "   MR: " + mutationRate); // mutation rate
         // Checking if the "Route" series already exists:
         boolean routeSeriesExists = chart.getSeriesMap().containsKey("Route");
